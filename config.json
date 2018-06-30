@@ -1,5 +1,5 @@
 {
-  "token"  : "discord api key",
-  "brawltoken" : "BRAWL API KEY",
+  "token"  : "key",
+  "brawltoken" : "key",
   "prefix" : "+"
 }

@@ -2,42 +2,83 @@ const Discord = require("discord.js");
 const client = new Discord.Client();
 const config = require("./config.json");
 const request = require("request");
-const the_interval = 5000;
-let discordMessage;
+const the_interval = 30000;
+let discordMessages = [];
+let lastMsg;
 let data = {};
 let recent = {};
 
 setInterval(function() {
     console.log("I am doing my 5 minutes check");
     let request = require("request");
+    for (let pageno = 1; pageno < 7; pageno++) {
+        let url = "https://api.brawlhalla.com/rankings/1v1/aus/" + pageno + "?api_key=" + config.brawltoken;
 
-    let url = "https://api.brawlhalla.com/rankings/1v1/aus/1?api_key=" + config.brawltoken;
+        request({
+            url: url,
+            json: true
+        }, function (err, res, body) {
+            if (!err && res.statusCode === 200) {
+                for (let i = 0; i < body.length; i++) {
+                    let obj = body[i];
+                    updateList(obj);
+                }
+                updateRecent();
+                updateDiscord();
 
-    request({
-        url: url,
-        json: true
-    }, function (err, res, body) {
-        if (!err && res.statusCode === 200) {
-            for(let i = 0; i < body.length; i++) {
-                let obj = body[i];
-                updateList(obj);
             }
-            updateRecent();
-            updateDiscord();
-            console.log(data);
-            console.log("------------RECENT-------------");
-            console.log(recent)
-        }
 
-    })
+        })
+    }
 }, the_interval);
 
 function updateDiscord(){
-    let string = "Recently played:\n";
+    let recentList = [];
     for(let i in recent){
-        string += data[i].name + '\n'
+        recentList.push(recent[i])
     }
-    discordMessage.edit(string);
+
+    let sorted = recentList.sort(function(a, b) {return a.rank - b.rank});
+
+    let d = new Date();
+    let fields = [];
+    for(let i = 0; i < sorted.length; i++){
+        let elo = sorted[i].elo;
+        let change = String(parseInt(sorted[i].elo) - parseInt(sorted[i].oldelo));
+        let changeSign = (change < 0) ? "" : "+";
+        let field = {
+            "name": sorted[i].rank + ": " + sorted[i].name,
+            "value": "elo: " + elo +" (" + changeSign + change + ")\n*updated " + String(Math.floor((d.getTime() - sorted[i].time) / 60000)) + " minutes ago*\n- ",
+            "inline": true
+        };
+        fields.push(field)
+    }
+    let embed = {
+            "embed": {
+                "title": "Brawlhalla Aus 1v1 Queue",
+                "description": "Displaying players in the top 300 who have played ranked in the last 30 minutes.\n- ",
+                // "url": "https://discordapp.com",
+                "color": 16743647,
+                "footer": {
+
+                    "text": "updated"
+                },
+                "thumbnail": {
+                    "url": "https://i.imgur.com/LmdHZUg.png"
+                },
+                "author": {
+                    "name": "lesmaux",
+                    "url": "https://discordapp.com",
+                    "icon_url": "https://cdn.discordapp.com/embed/avatars/0.png"
+                },
+                "fields": fields
+            }
+        }
+    ;
+
+    if (lastMsg !== undefined) {
+        lastMsg.edit(embed);
+    }
 }
 
 function updateRecent(){
@@ -63,7 +104,11 @@ function updateList(obj){
             player.oldelo = data[obj.brawlhalla_id].elo;
             player.time = d.getTime()
         }
+
         player.name = obj.name;
+        if (player.name.length > 15){
+            player.name = player.name.substring(0, 13) + "..."
+        }
         player.rank = obj.rank;
         player.elo = obj.rating;
 
@@ -79,12 +124,13 @@ function updateList(obj){
 }
 
 
-client.on("ready", () => {
+client.on("ready", async () => {
     // This event will run if the bot starts, and logs in, successfully.
     console.log(`Bot has started, with ${client.users.size} users, in ${client.channels.size} channels of ${client.guilds.size} guilds.`);
 // Example of changing the bot's playing game to something useful. `client.user` is what the
 // docs refer to as the "ClientUser".
-client.user.setActivity(`Serving ${client.guilds.size} servers`);
+//client.user.setActivity(`Serving ${client.guilds.size} servers`);
+
 });
 
 client.on("guildCreate", guild => {
@@ -138,7 +184,8 @@ client.on("message", async message => {
     }
 
     if(command === "here!") {
-        discordMessage = await message.channel.send("OK!");
+        lastMsg = await message.channel.send("OK!");
+
     }
 
 
