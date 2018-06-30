@@ -4,5 +4,9 @@
   "dependencies": {
     "discord.js": "^11.3.2",
     "request": "^2.87.0"
+  },
+  "scripts": {
+    "start": "node app.js",
+    "deploy": "gcloud app deploy"
   }
 }
