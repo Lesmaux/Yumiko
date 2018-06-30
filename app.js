@@ -2,35 +2,42 @@ const Discord = require("discord.js");
 const client = new Discord.Client();
 const config = require("./config.json");
 const request = require("request");
-const the_interval = 30000;
+const second = 1000;
 let discordMessages = [];
 let lastMsg;
 let data = {};
 let recent = {};
-
+let clock = 0;
 setInterval(function() {
-    console.log("I am doing my 5 minutes check");
-    let request = require("request");
-    for (let pageno = 1; pageno < 7; pageno++) {
-        let url = "https://api.brawlhalla.com/rankings/1v1/aus/" + pageno + "?api_key=" + config.brawltoken;
+    if(clock % 60 === 0) {
+        console.log("I am doing my 5 minutes check");
+        getData(0, 6);
+    }
+    clock++
+}, second);
 
-        request({
-            url: url,
-            json: true
-        }, function (err, res, body) {
-            if (!err && res.statusCode === 200) {
-                for (let i = 0; i < body.length; i++) {
-                    let obj = body[i];
-                    updateList(obj);
-                }
+function getData(currentPage, pages){
+    let url = "https://api.brawlhalla.com/rankings/1v1/aus/" + (currentPage + 1) + "?api_key=" + config.brawltoken;
+    request({
+        url: url,
+        json: true
+    }, function (err, res, body) {
+        if (!err && res.statusCode === 200) {
+            for (let i = 0; i < body.length; i++) {
+                let obj = body[i];
+                updateList(obj);
+            }
+            if (currentPage < pages){
+                getData(currentPage + 1, pages)
+            } else{
                 updateRecent();
                 updateDiscord();
-
+                console.log(data)
             }
+        }
+    })
+}
 
-        })
-    }
-}, the_interval);
 
 function updateDiscord(){
     let recentList = [];
