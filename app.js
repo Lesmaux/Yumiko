@@ -3,23 +3,31 @@ const client = new Discord.Client();
 const config = require("./config.json");
 const request = require("request");
 const second = 1000;
-const pages = 10;
+const pages1v1 = 6;
+const pages2v2 = 2;
 let discordMessages = [];
+let discordMessages2v2 = [];
 let lastMsg;
 let data = {};
+let data2v2 = {};
 let recent = {};
+let recent2v2 = {};
 let clock = 0;
 
 setInterval(function() {
     //runs get data every 60 seconds
     if(clock % 60 === 0) {
-        getData(0, pages-1);
+        getData(0, pages1v1-1);
+
+    //staggers the 2v2 call by 2 seconds
+    }else if((2 + clock) % 60 === 0) {
+        getData(0, pages2v2-1, true);
     }
     clock++
 }, second);
 
-function getData(currentPage, pages){
-    let url = "https://api.brawlhalla.com/rankings/1v1/aus/" + (currentPage + 1) + "?api_key=" + config.brawltoken;
+function getData(currentPage, pages, is2v2 = false){
+    let url = "https://api.brawlhalla.com/rankings/" + (is2v2 ? "2v2" : "1v1") + "/aus/" + (currentPage + 1) + "?api_key=" + config.brawltoken;
     request({
         url: url,
         json: true
@@ -27,13 +35,20 @@ function getData(currentPage, pages){
         if (!err && res.statusCode === 200) {
             for (let i = 0; i < body.length; i++) {
                 let obj = body[i];
-                updateList(obj);
+                if(is2v2) updateList2v2(obj);
+                else updateList1v1(obj);
             }
             if (currentPage < pages){
-                getData(currentPage + 1, pages)
+                getData(currentPage + 1, pages, is2v2)
             } else{
-                updateRecent();
-                updateDiscord();
+                if(is2v2) {
+                    console.log(data2v2);
+                    updateRecent2v2();
+                    updateDiscord2v2();
+                }else{
+                    updateRecent();
+                    updateDiscord();
+                }
             }
         }
     })
@@ -56,7 +71,7 @@ function updateDiscord(){
         let changeSign = (change < 0) ? "" : "+";
         let field = {
             "name": sorted[i].rank + ": " + sorted[i].name,
-            "value": "elo: " + elo +" (" + changeSign + change + ")\n*updated " + String(Math.floor((d.getTime() - sorted[i].time) / 60000)) + " minutes ago*\n- ",
+            "value": "elo: " + elo +" (" + changeSign + change + ")\n*updated " + String(Math.floor((d.getTime() - sorted[i].time) / 60000)) + " minutes ago*\n\u200b",
             "inline": true
         };
         fields.push(field)
@@ -64,7 +79,7 @@ function updateDiscord(){
     let embed = {
             "embed": {
                 "title": "Brawlhalla Aus 1v1 Queue",
-                "description": "Displaying players in the top 300 who have played ranked in the last 30 minutes.\n- ",
+                "description": "Displaying players in the AUS top 300 who have played ranked in the last 30 minutes.\n\u200b",
                 // "url": "https://discordapp.com",
                 "color": 16743647,
                 "timestamp": new Date(),
@@ -90,6 +105,56 @@ function updateDiscord(){
         }
     }
 }
+function updateDiscord2v2(){
+    let recentList = [];
+    for(let i in recent2v2){
+        recentList.push(recent2v2[i])
+    }
+
+    let sorted = recentList.sort(function(a, b) {return a.rank - b.rank});
+
+    let d = new Date();
+    let fields = [];
+    for(let i = 0; i < sorted.length; i++){
+        let elo = sorted[i].elo;
+        let change = String(parseInt(sorted[i].elo) - parseInt(sorted[i].oldelo));
+        let changeSign = (change < 0) ? "" : "+";
+        let field = {
+            "name": sorted[i].rank + ": " + sorted[i].name,
+            "value": "elo: " + elo +" (" + changeSign + change + ")\n*updated " + String(Math.floor((d.getTime() - sorted[i].time) / 60000)) + " minutes ago*\n\u200b",
+            "inline": true
+        };
+        fields.push(field)
+    }
+    let embed = {
+            "embed": {
+                "title": "Brawlhalla Aus 2v2 Queue",
+                "description": "Displaying players in the AUS top 100 who have played ranked in the last 30 minutes.\n\u200b",
+                // "url": "https://discordapp.com",
+                "color": 16743647,
+                "timestamp": new Date(),
+                "footer": {
+
+                    // "text": "updated"
+                },
+                "thumbnail": {
+                    "url": "https://i.imgur.com/LmdHZUg.png"
+                },
+                "author": {
+                    // "name": "lesmaux",
+                    // "url": "https://discordapp.com",
+                    // "icon_url": "https://cdn.discordapp.com/avatars/101209482347937792/a_d309df2dcf75c67d9d5777fca7327bf3.png?size=128"
+                },
+                "fields": fields
+            }
+        }
+    ;
+    for(let i = 0, len = discordMessages2v2.length; i < len ; i++){
+        if (discordMessages2v2[i] !== undefined) {
+            discordMessages2v2[i].edit(embed);
+        }
+    }
+}
 
 function updateRecent(){
     let d = new Date();
@@ -104,8 +169,40 @@ function updateRecent(){
         }
     }
 }
+function updateRecent2v2(){
+    let d = new Date();
+    for (let id in data2v2){
+        if (d.getTime() - data2v2[id].time < 600000){
+            recent2v2[id] = data2v2[id]
+        }
+    }
+    for (let id in recent2v2) {
+        if (d.getTime() - data2v2[id].time > 1800000) {
+            delete recent2v2[id];
+        }
+    }
+}
 
-function updateList(obj){
+function cutName(string, is2v2=false){
+    if(is2v2 && string > 20){
+        let index = string.indexOf("+", 0);
+        let n1 = string.substring(0,index);
+        let n2 = string.substring(index+1);
+        if (n1 > 18){
+            n1 = n1.substring(0, 10) + ".."
+        }
+        if (n2 > 18){
+             n2 = n2.substring(0, 10) + ".."
+        }
+        return n1 + "\n" + n2;
+    }
+    else if (string > 20){
+        return string.substring(0, 18) + "..."
+    }
+    else return string
+}
+
+function updateList1v1(obj){
     let d = new Date();
 
     if (obj.brawlhalla_id in data){
@@ -116,8 +213,8 @@ function updateList(obj){
         }
 
         player.name = obj.name;
-        if (player.name.length > 15){
-            player.name = player.name.substring(0, 13) + "..."
+        if (player.name.length > 18){
+            player.name = player.name.substring(0, 18) + "..."
         }
         player.rank = obj.rank;
         player.elo = obj.rating;
@@ -125,6 +222,31 @@ function updateList(obj){
     } else {
         data[obj.brawlhalla_id] = {
             name : obj.name,
+            rank : obj.rank,
+            oldelo : obj.rating,
+            elo : obj.rating,
+            time : 0,
+        }
+    }
+}
+
+function updateList2v2(obj){
+    let d = new Date();
+    let id = "" + obj.brawlhalla_id_one + obj.brawlhalla_id_two;
+    if (id in data2v2){
+        let player = data2v2[id];
+        if (player.elo !== obj.rating){
+            player.oldelo = data2v2[id].elo;
+            player.time = d.getTime()
+        }
+
+        name = cutName(obj.teamname, true);
+        player.rank = obj.rank;
+        player.elo = obj.rating;
+
+    } else {
+        data2v2[id] = {
+            name : cutName(obj.teamname, true),
             rank : obj.rank,
             oldelo : obj.rating,
             elo : obj.rating,
@@ -161,6 +283,16 @@ client.on("message", async message => {
         lastMsg = await message.channel.send("OK!");
         discordMessages.push(lastMsg);
         updateDiscord()
+    }
+    if(command === "here2!") {
+        //Only allows command from certain roles
+        if(!message.member.roles.some(r=>["Admin", "Yumiko"].includes(r.name)) )
+            return message.reply("Sorry, you don't have permissions to use this!");
+
+        //sends a message and adds it to the edit list.
+        lastMsg = await message.channel.send("OK!");
+        discordMessages2v2.push(lastMsg);
+        updateDiscord2v2()
     }
 });
 
